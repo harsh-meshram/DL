@@ -1,0 +1,96 @@
+!pip install librosa --quiet
+
+
+import os, numpy as np, librosa, tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import SimpleRNN, Dense, Dropout
+from tensorflow.keras.utils import to_categorical
+from sklearn.model_selection import train_test_split
+from tqdm import tqdm
+
+
+import kagglehub
+
+# Download latest version
+path = kagglehub.dataset_download("carlthome/gtzan-genre-collection")
+
+print("Path to dataset files:", path)
+
+
+
+import os
+
+data_dir = '/root/.cache/kagglehub/datasets/carlthome/gtzan-genre-collection/versions/1'
+os.listdir(data_dir)
+
+
+
+
+data_dir = '/root/.cache/kagglehub/datasets/carlthome/gtzan-genre-collection/versions/1/genres'
+
+
+
+
+def extract_features(file_path, max_pad_len=130):
+    try:
+        audio, sr = librosa.load(file_path, res_type='kaiser_fast', duration=30)
+        mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40)
+        pad_width = max_pad_len - mfccs.shape[1]
+        if pad_width > 0:
+            mfccs = np.pad(mfccs, pad_width=((0,0),(0,pad_width)), mode='constant')
+        else:
+            mfccs = mfccs[:, :max_pad_len]
+        return mfccs
+    except Exception as e:
+        print("Error:", file_path, e)
+        return None
+
+X, y, labels = [], [], os.listdir(data_dir)
+print("Extracting MFCCs...")
+for i, label in enumerate(labels):
+    folder = os.path.join(data_dir, label)
+    for f in tqdm(os.listdir(folder), desc=label):
+        fp = os.path.join(folder, f)
+        features = extract_features(fp)
+        if features is not None:
+            X.append(features)
+            y.append(i)
+
+X, y = np.array(X), np.array(y)
+print("✅ Features shape:", X.shape)
+
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# Reshape the input data to be 3D for the LSTM layer - This reshaping is redundant
+# X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2])
+# X_test  = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2])
+y_train, y_test = to_categorical(y_train), to_categorical(y_test)
+
+
+
+
+
+model = Sequential([
+    SimpleRNN(128, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+    Dropout(0.3),
+    SimpleRNN(64),
+    Dropout(0.3),
+    Dense(64, activation='relu'),
+    Dropout(0.3),
+    Dense(len(labels), activation='softmax')
+])
+
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+model.summary()
+
+
+
+history = model.fit(X_train, y_train, validation_data=(X_test, y_test),
+                    epochs=20, batch_size=32)
+
+
+
+
+loss, acc = model.evaluate(X_test, y_test)
+print(f"\n✅ Test Accuracy: {acc*100:.2f}%")
+
