@@ -1,0 +1,32 @@
+# Install YOLOv5 dependencies (if not already installed)
+!git clone https://github.com/ultralytics/yolov5
+%cd yolov5
+!pip install -r requirements.txt
+
+
+
+import torch
+from pathlib import Path
+from IPython.display import Image, display
+
+
+
+# Load custom image
+img_path = '/content/a-white-car-with-running-lights-on-and-with-the-word-u201cwaymo-u201d-emblazoned-on-the-rear-door-stands-in-a-street-with-othe.webp'  # Replace with your image path
+
+
+
+# Perform inference
+results = model(img_path)
+
+
+# Print detected objects and confidence
+results.print()
+
+
+# Display the image with bounding boxes
+results.show()
+
+
+# Optional: save results
+results.save(save_dir='results')

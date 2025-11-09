@@ -1,0 +1,86 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+
+corpus = """Alice was beginning to get very tired of sitting by her sister
+ on the bank, and of having nothing to do. Once or twice she had peeped
+ into the book her sister was reading..."""
+
+
+
+corpus = corpus.lower().replace("\n", "") # Clean the text
+
+tokenizer = Tokenizer(char_level=True) # Initialize character-level tokenizer
+tokenizer.fit_on_texts([corpus])
+total_chars = len(tokenizer.word_index) + 1
+
+
+encoded = tokenizer.texts_to_sequences([corpus])[0]
+
+
+seq_length = 40
+sequences = []
+for i in range(seq_length, len(encoded)):
+    seq = encoded[i-seq_length:i]
+    label = encoded[i]
+    sequences.append((seq, label))
+
+X = np.array([s[0] for s in sequences])
+y = to_categorical([s[1] for s in sequences], num_classes=total_chars)
+
+
+model = Sequential([
+    Embedding(total_chars, 50, input_length=seq_length),
+    LSTM(128, return_sequences=False),
+    Dense(total_chars, activation='softmax')
+])
+
+
+
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+model.fit(X, y, epochs=75, verbose=1)
+
+
+
+def generate_text(model, tokenizer, seq_length, seed_text, n_chars):
+    result = []
+    in_text = seed_text.lower() # Use lowercase to match training data
+    
+    for _ in range(n_chars):
+        # Encode the text
+        encoded = tokenizer.texts_to_sequences([in_text])[-1]
+        
+        # Truncate to the last 'seq_length' characters
+        encoded = encoded[-seq_length:]
+        
+        # Pad sequences to ensure consistent input length
+        encoded = pad_sequences([encoded], maxlen=seq_length, padding='pre')
+        
+        # Predict the next character
+        y_pred = np.argmax(model.predict(encoded, verbose=0))
+        
+        # Map the prediction back to a character
+        out_char = ''
+        for char, index in tokenizer.word_index.items():
+            if index == y_pred:
+                out_char = char
+                break
+        
+        # Append the character to the input text and result
+        in_text += out_char
+        result.append(out_char)
+        
+    return seed_text + ''.join(result)
+
+
+print("--- Generated Text ---")
+print(generate_text(model, tokenizer, seq_length, "Alice was", 200))
